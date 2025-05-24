@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Text Generator dengan Gemini 2.0 Flash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Mengatur font Inter secara default untuk seluruh body */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f6; /* Warna latar belakang lembut */
+            color: #333; /* Warna teks utama */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Konten di bagian atas agar tidak terlalu ke bawah */
+            min-height: 100vh; /* Tinggi minimum layar penuh */
+            box-sizing: border-box; /* Pastikan padding tidak menambah lebar */
+        }
+
+        /* Styling untuk loading spinner */
+        .loading-spinner {
+            border: 4px solid #f3f3f3; /* Abu-abu terang */
+            border-top: 4px solid #3498db; /* Biru */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite; /* Animasi berputar */
+            margin: 20px auto; /* Pusatkan spinner */
+        }
+
+        /* Kelas utilitas untuk menyembunyikan elemen */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Keyframes untuk animasi berputar spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Styling tambahan untuk elemen textarea agar lebih mudah digunakan */
+        textarea {
+            resize: vertical; /* Memungkinkan pengguna mengubah ukuran vertikal */
+            min-height: 120px; /* Tinggi minimum textarea */
+        }
+
+        /* Styling untuk container output teks */
+        /* Menggunakan ID yang sama dengan sebelumnya untuk meminimalkan perubahan HTML */
+        #imageContainer { /* Tetap menggunakan ID 'imageContainer' seperti yang ada di HTML */
+            min-height: 64px; /* Tinggi minimum untuk teks */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e2e8f0; /* Warna latar belakang yang lebih terang untuk output teks */
+            border-radius: 8px;
+            overflow: hidden;
+            text-align: left; /* Teks akan rata kiri */
+            padding: 16px; /* Padding di sekitar teks yang dihasilkan */
+            word-wrap: break-word; /* Pastikan teks tidak melampaui batas container */
+        }
+        #imageContainer p { /* Menyesuaikan p di dalam imageContainer */
+            max-width: 100%; /* Pastikan paragraf tidak melebihi lebar container */
+            white-space: pre-wrap; /* Ini adalah perubahan penting untuk mempertahankan format teks */
+        }
+
+
+        /* Styling untuk teks placeholder di dalam imageContainer */
+        .placeholder-text {
+            color: #6c757d;
+            font-style: italic;
+            text-align: center;
+        }
+
+        /* Styling untuk pesan kesalahan */
+        .error-text {
+            color: #e74c3c; /* Merah */
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8 lg:p-10 bg-gray-100 flex justify-center items-start min-h-screen">
+    <div class="container bg-white p-6 sm:p-8 md:p-10 rounded-xl shadow-lg max-w-2xl w-full text-center">
+        <h1 class="text-3xl sm:text-4xl font-bold text-blue-800 mb-4">Generator Teks AI</h1>
+        <p class="text-gray-700 mb-6 text-base sm:text-lg">
+            Masukkan topik atau permintaan teks Anda. AI Gemini 2.0 Flash akan membantu Anda membuatnya!
+        </p>
+
+        <div class="input-section flex flex-col gap-4 mb-8">
+            <textarea
+                id="promptInput"
+                placeholder="Contoh: Tuliskan ide cerita pendek tentang petualangan di kota bawah laut."
+                class="w-full p-3 sm:p-4 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                rows="5"
+            ></textarea>
+
+            <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+                <button
+                    id="generateBtn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg text-lg sm:text-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 flex-1"
+                >
+                    Hasilkan Teks
+                </button>
+                <button
+                    id="resetBtn"
+                    class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-6 rounded-lg text-lg sm:text-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 flex-1"
+                >
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <div class="image-display-section mt-8 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl sm:text-3xl font-semibold text-gray-800 mb-6">Teks yang Dihasilkan</h2>
+            <div
+                id="imageContainer"
+                class="min-h-64 flex justify-center items-center bg-gray-200 rounded-lg overflow-hidden relative"
+            >
+                <p class="placeholder-text text-gray-600 p-4">
+                    Teks yang dihasilkan akan muncul di sini setelah Anda mengklik 'Hasilkan Teks'.
+                </p>
+            </div>
+            <div id="loadingSpinner" class="loading-spinner hidden"></div>
+            <div id="countdownTimer" class="hidden text-xl font-semibold text-blue-700 mt-4">
+                Menghasilkan teks... Waktu berlalu: <span id="timerValue">0</span> detik
+            </div>
+            <button
+                id="downloadBtn"
+                class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-5 rounded-lg text-base sm:text-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 mt-4 hidden"
+            >
+                Download Gambar
+            </button>
+        </div>
+
+        <div class="footer mt-10 pt-6 border-t border-gray-200 text-sm text-gray-500">
+            <p>&copy; 2025 AI Text Generator. Dibuat dengan ❤️</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Mendapatkan referensi ke elemen-elemen DOM
+            const promptInput = document.getElementById('promptInput');
+            const generateBtn = document.getElementById('generateBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const imageContainer = document.getElementById('imageContainer'); // Menggunakan ID yang sudah ada
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const placeholderText = imageContainer.querySelector('.placeholder-text');
+            const downloadBtn = document.getElementById('downloadBtn'); // Tombol download akan disembunyikan
+            const countdownTimer = document.getElementById('countdownTimer');
+            const timerValueSpan = document.getElementById('timerValue');
+
+            let timerInterval; // Variabel untuk menyimpan ID interval timer
+            let startTime; // Waktu mulai untuk menghitung durasi generasi teks
+
+            /**
+             * Fungsi untuk mereset tampilan UI ke kondisi awal.
+             * Menyembunyikan teks hasil, spinner, timer.
+             * Mengosongkan input prompt.
+             */
+            const resetUI = () => {
+                // Tampilkan kembali teks placeholder jika ada
+                if (placeholderText) {
+                    placeholderText.classList.remove('hidden');
+                }
+                imageContainer.innerHTML = ''; // Hapus konten yang ada
+                loadingSpinner.classList.add('hidden'); // Sembunyikan spinner
+                downloadBtn.classList.add('hidden'); // Sembunyikan tombol download
+                countdownTimer.classList.add('hidden'); // Sembunyikan timer
+                clearInterval(timerInterval); // Hentikan timer jika sedang berjalan
+                timerValueSpan.textContent = '0'; // Reset nilai timer
+                promptInput.value = ''; // Kosongkan input prompt
+            };
+
+            // Event listener untuk tombol Reset
+            resetBtn.addEventListener('click', () => {
+                resetUI(); // Panggil fungsi resetUI
+            });
+
+            // Event listener untuk tombol Generate (Hasilkan Teks)
+            generateBtn.addEventListener('click', async () => {
+                const prompt = promptInput.value.trim(); // Ambil nilai prompt dan hapus spasi di awal/akhir
+
+                // Validasi input: jika prompt kosong, tampilkan pesan kesalahan
+                if (prompt === '') {
+                    resetUI(); // Reset UI terlebih dahulu
+                    imageContainer.innerHTML = '<p class="error-text">Silakan masukkan teks (prompt) untuk dihasilkan.</p>';
+                    return; // Hentikan eksekusi fungsi
+                }
+
+                // Reset UI dan tampilkan indikator loading/timer sebelum memulai generasi
+                if (placeholderText) {
+                    placeholderText.classList.add('hidden'); // Sembunyikan teks placeholder
+                }
+                imageContainer.innerHTML = ''; // Kosongkan container output
+                loadingSpinner.classList.remove('hidden'); // Tampilkan spinner
+                downloadBtn.classList.add('hidden'); // Pastikan tombol download tersembunyi
+                countdownTimer.classList.remove('hidden'); // Tampilkan timer
+                timerValueSpan.textContent = '0'; // Reset nilai timer
+
+                // Mulai timer hitung maju
+                startTime = Date.now(); // Catat waktu mulai
+                timerInterval = setInterval(() => {
+                    const elapsedTime = Math.floor((Date.now() - startTime) / 1000); // Hitung waktu berlalu dalam detik
+                    timerValueSpan.textContent = elapsedTime; // Perbarui tampilan timer
+                }, 1000); // Perbarui setiap 1 detik
+
+                try {
+                    // Payload untuk permintaan API Gemini 2.0 Flash (generasi teks)
+                    const payload = {
+                        contents: [
+                            {
+                                parts: [
+                                    {
+                                        text: prompt
+                                    }
+                                ]
+                            }
+                        ]
+                    };
+
+                    const apiKey = "AIzaSyDOhsUEyVD2h6MSOSIzpevKAHcTw9KqHi0"; // API key diatur kosong agar Canvas dapat menyediakan secara otomatis
+                    // URL endpoint API Gemini 2.0 Flash
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    // Melakukan fetch (permintaan HTTP) ke API Gemini
+                    const response = await fetch(apiUrl, {
+                        method: 'POST', // Metode POST untuk mengirim data
+                        headers: { 'Content-Type': 'application/json' }, // Tentukan tipe konten JSON
+                        body: JSON.stringify(payload) // Konversi payload objek menjadi string JSON
+                    });
+
+                    // Parse respons JSON dari API
+                    const result = await response.json();
+
+                    // Periksa apakah respons mengandung teks yang valid
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+                        const generatedText = result.candidates[0].content.parts[0].text;
+                        // Tampilkan teks yang dihasilkan dalam imageContainer
+                        // Tambahkan kelas CSS untuk mempertahankan spasi dan baris baru
+                        imageContainer.innerHTML = `<p class="text-left p-4" style="white-space: pre-wrap;">${generatedText}</p>`;
+                        downloadBtn.classList.add('hidden'); // Tombol download tetap disembunyikan
+                    } else {
+                        // Jika respons API tidak valid atau kosong
+                        resetUI(); // Reset UI
+                        imageContainer.innerHTML = '<p class="error-text">Gagal menghasilkan teks. Respons API tidak valid atau kosong.</p>';
+                        console.error('API response structure unexpected:', result); // Log kesalahan ke konsol
+                    }
+
+                } catch (error) {
+                    // Tangani kesalahan yang terjadi selama proses generasi teks
+                    console.error('Error during text generation:', error);
+                    resetUI(); // Reset UI
+                    imageContainer.innerHTML = '<p class="error-text">Terjadi kesalahan saat memproses permintaan Anda. Mohon coba lagi nanti.</p>';
+                } finally {
+                    // Blok finally akan selalu dieksekusi setelah try/catch selesai
+                    loadingSpinner.classList.add('hidden'); // Sembunyikan spinner
+                    countdownTimer.classList.add('hidden'); // Sembunyikan timer
+                    clearInterval(timerInterval); // Hentikan timer
+                    // Jika setelah semua proses, imageContainer masih kosong, tampilkan kembali teks placeholder.
+                    if (imageContainer.innerHTML === '') {
+                        if (placeholderText) {
+                            placeholderText.classList.remove('hidden');
+                        } else {
+                            // Jika placeholderText belum ada (misal karena dihapus), buat ulang
+                            imageContainer.innerHTML = '<p class="placeholder-text">Teks yang dihasilkan akan muncul di sini setelah Anda mengklik \'Hasilkan Teks\'.</p>';
+                        }
+                    }
+                }
+            });
+
+            // Event listener untuk tombol download (tetap ada di HTML, tapi akan selalu disembunyikan oleh JS)
+            downloadBtn.addEventListener('click', () => {
+                // Logika ini tidak relevan untuk teks, jadi biarkan kosong atau tampilkan pesan.
+                imageContainer.innerHTML = '<p class="error-text">Fitur download hanya untuk gambar, bukan teks.</p>';
+            });
+        });
+    </script>
+</body>
+</html>
